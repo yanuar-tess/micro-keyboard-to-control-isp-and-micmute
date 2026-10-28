@@ -187,7 +187,8 @@ def check_mic(rep, cfg):
             rep.fatal.append(f"no microphone to mute/unmute{reason}")
             return False
         rep.ok.append(f"microphone target now: {', '.join(names)} "
-                      f"(mics in use, else the default; toggled by this script)")
+                      f"(mics in use, else the last used / MicMute's / default mic; "
+                      f"toggled by this script)")
         _warn_micmute_conflict(rep, cfg.mic_key)
         return True
 

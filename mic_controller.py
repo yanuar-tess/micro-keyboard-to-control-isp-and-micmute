@@ -2,9 +2,10 @@
 Windows microphone mute control (Core Audio via pycaw).
 
 Target = the microphone(s) an app is recording from right now (Meet, Teams,
-Discord, ... each may pick its own device, not the Windows default), falling
-back to the Windows default mic when nothing is recording. Re-resolved on every
-poll, so a newly opened call or plugged headset is picked up automatically.
+Discord, ... each may pick its own device, not the Windows default). When
+nothing is recording (call ended), it keeps the mic(s) the last call used, then
+MicMute's chosen mic, then the Windows default. Re-resolved on every poll, so a
+newly opened call or plugged headset is picked up automatically.
 
 MicMonitor owns a COM-initialised thread: it polls the real mute state (so
 mutes from Teams, MicMute, etc. are picked up too) and services toggle
@@ -26,6 +27,8 @@ POLL_SEC = 0.5
 E_CAPTURE = 1
 DEVICE_STATE_ACTIVE = 1
 AUDIO_SESSION_STATE_ACTIVE = 1
+CAPTURE_ID_PREFIX = '{0.0.1.00000000}.'
+MICMUTE_REG = r"Software\MicMute"
 
 
 def _volume(device):
@@ -49,20 +52,40 @@ def _endpoint():
     return _volume(device) if device is not None else None
 
 
-def targets():
-    """[(device_id, volume)] for the mics being recorded from, else the default mic."""
+def micmute_device_id():
+    """Endpoint id of the mic chosen in MicMute (HKCU\\Software\\MicMute DeviceId), or None."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, MICMUTE_REG) as k:
+            guid, _ = winreg.QueryValueEx(k, 'DeviceId')
+    except OSError:
+        return None
+    return CAPTURE_ID_PREFIX + '{' + guid.strip('{}') + '}' if guid else None
+
+
+def targets(fallback_ids=()):
+    """[(device_id, volume)] for the mics being recorded from. When nothing records,
+    the first of fallback_ids that is still plugged in, else MicMute's mic, else the
+    Windows default mic."""
     enum = AudioUtilities.GetDeviceEnumerator()
     active = enum.EnumAudioEndpoints(E_CAPTURE, DEVICE_STATE_ACTIVE)
-    in_use = []
+    in_use, present = [], {}
     for i in range(active.GetCount()):
         device = active.Item(i)
         try:
+            present[device.GetId()] = device
             if _is_recording(device):
                 in_use.append((device.GetId(), _volume(device)))
         except comtypes.COMError:
             continue  # device vanished mid-enumeration
     if in_use:
         return in_use
+    kept = [(i, _volume(present[i])) for i in fallback_ids if i in present]
+    if kept:
+        return kept
+    mm = micmute_device_id()
+    if mm in present:
+        return [(mm, _volume(present[mm]))]
     device = AudioUtilities.GetMicrophone()
     return [(device.GetId(), _volume(device))] if device is not None else []
 
@@ -113,7 +136,7 @@ class MicMonitor:
         try:
             while not self._stop.is_set():
                 try:
-                    eps = targets()
+                    eps = targets(self._target_ids or ())
                     self._log_targets(tuple(dev_id for dev_id, _ in eps))
                     if self._toggle.is_set():
                         self._toggle.clear()

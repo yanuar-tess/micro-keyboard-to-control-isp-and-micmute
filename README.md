@@ -3,7 +3,7 @@
 Turn a cheap 2-key USB macro pad into a desk control panel for a Windows PC:
 
 - **Button #1** swaps the active internet uplink (WAN) on a MikroTik router between two ISPs.
-- **Button #2** mutes / unmutes the Windows default microphone.
+- **Button #2** mutes / unmutes the microphone your call app is using.
 - **The keyboard LED** shows both states at once.
 
 <p align="center">
@@ -120,9 +120,10 @@ of a mapped key prints a `[key] Key.f18 pressed …` line, so you can check the 
 
 The mic key acts on the **microphone(s) an app is recording from right now**. Meet, Teams,
 Discord and others often use a mic chosen in their own settings, not the Windows default.
-When nothing is recording, it falls back to the Windows default mic (Settings → System →
-Sound → Input). The target is re-checked every 0.5 s, so starting a call or plugging in a
-headset just works.
+When nothing is recording (for example after the call ends), it keeps the mic(s) the last
+call used. If no call has happened since the switcher started, it uses the mic selected in
+MicMute, and failing that the Windows default mic (Settings → System → Sound → Input). The
+target is re-checked every 0.5 s, so starting a call or plugging in a headset just works.
 
 - One press: if any target mic is live, all of them are muted; if all are muted, all are
   unmuted.

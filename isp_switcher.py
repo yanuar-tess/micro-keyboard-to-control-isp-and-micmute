@@ -13,7 +13,7 @@ Mic key (default F19, button #2): toggles the Windows default microphone (by
 this script when keys.mic_toggle_by_script is true, else by another app; the
 mic state is always tracked). Both keyboard LEDs share one color, so the mic
 state is shown by blinking: mic muted -> steady ISP color, mic live -> ISP
-color blinking with white. Mutes made elsewhere (Teams, MicMute, ...) show too.
+color with a white double blink. Mutes made elsewhere (Teams, MicMute, ...) show too.
 
 Options:
   --config PATH   config file (default: ISP_SWITCHER_CONFIG, else config.toml next to the exe/script)
@@ -42,9 +42,11 @@ BLINK_A = 'green'
 BLINK_B = 'yellow'
 BLINK_INTERVAL = 0.1
 
-# There is no live "off" color, so the mic-live blink alternates with white.
-MIC_BLINK_OFF = 'white'
-MIC_BLINK_INTERVAL = 0.5
+# Mic-live Airbus-style strobe (double flash, ~46/min), starting with white the
+# moment the mic goes live: (color, seconds); None = the ISP color. There is no
+# live "off" color, so the flashes are white. ~0.1 s is the shortest flash that
+# reads reliably over USB HID writes and Windows timer resolution.
+MIC_LIVE_PATTERN = [('white', 0.1), (None, 0.1), ('white', 0.1), (None, 1.0)]
 
 CONFIRM_TIMEOUT_SEC = 30
 CONFIRM_POLL_SEC = 0.5
@@ -127,7 +129,7 @@ class IspSwitcher:
                 # keyboard's power-on color, even while the mic blink runs.
                 self.led.set_color(color)
                 if self._mic_live:
-                    self.led.start_blink(color, MIC_BLINK_OFF, MIC_BLINK_INTERVAL)
+                    self.led.start_pattern([(c or color, sec) for c, sec in MIC_LIVE_PATTERN])
             except Exception as e:
                 print(f"[led] set {color} failed (keyboard unplugged?): {e}")
 

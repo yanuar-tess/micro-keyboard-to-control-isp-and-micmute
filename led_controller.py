@@ -123,18 +123,23 @@ class LedController:
         self._apply(self._last_color, commit=False)
 
     def start_blink(self, color_a, color_b, interval_sec):
+        self.start_pattern([(color_a, interval_sec), (color_b, interval_sec)])
+
+    def start_pattern(self, steps):
+        """Loop over [(color, seconds), ...]; the first color shows immediately."""
         self.stop_blink()
         stop_event = threading.Event()
 
         def _loop():
-            toggle = False
             while not stop_event.is_set():
-                try:
-                    self._apply(color_b if toggle else color_a, commit=False)
-                except Exception:
-                    pass
-                toggle = not toggle
-                stop_event.wait(interval_sec)
+                for color, seconds in steps:
+                    if stop_event.is_set():
+                        return
+                    try:
+                        self._apply(color, commit=False)
+                    except Exception:
+                        pass
+                    stop_event.wait(seconds)
 
         self._blink_stop = stop_event
         self._blink_thread = threading.Thread(target=_loop, daemon=True)

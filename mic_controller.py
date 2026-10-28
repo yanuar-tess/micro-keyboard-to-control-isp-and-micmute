@@ -1,37 +1,89 @@
 """
-Windows default-microphone mute control (Core Audio via pycaw).
+Windows microphone mute control (Core Audio via pycaw).
+
+Target = the microphone(s) an app is recording from right now (Meet, Teams,
+Discord, ... each may pick its own device, not the Windows default), falling
+back to the Windows default mic when nothing is recording. Re-resolved on every
+poll, so a newly opened call or plugged headset is picked up automatically.
 
 MicMonitor owns a COM-initialised thread: it polls the real mute state (so
 mutes from Teams, MicMute, etc. are picked up too) and services toggle
 requests coming from other threads such as the pynput key listener.
+
+This is an OS-level mute: the app receives silence, but its own mute button
+does not change.
 """
 import threading
+import warnings
 
 import comtypes
 from comtypes import CLSCTX_ALL
-from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+from pycaw.pycaw import (AudioUtilities, IAudioEndpointVolume, IAudioSessionControl2,
+                         IAudioSessionManager2)
 
 POLL_SEC = 0.5
 
+E_CAPTURE = 1
+DEVICE_STATE_ACTIVE = 1
+AUDIO_SESSION_STATE_ACTIVE = 1
 
-def _endpoint():
-    # Re-resolved on every call so a newly plugged headset becomes the target.
-    device = AudioUtilities.GetMicrophone()
-    if device is None:
-        return None
+
+def _volume(device):
     iface = device.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
     return iface.QueryInterface(IAudioEndpointVolume)
 
 
+def _is_recording(device):
+    mgr = device.Activate(IAudioSessionManager2._iid_, CLSCTX_ALL, None)
+    sessions = mgr.QueryInterface(IAudioSessionManager2).GetSessionEnumerator()
+    for i in range(sessions.GetCount()):
+        ctl = sessions.GetSession(i).QueryInterface(IAudioSessionControl2)
+        if ctl.GetState() == AUDIO_SESSION_STATE_ACTIVE:
+            return True
+    return False
+
+
+def _endpoint():
+    """Windows default mic's volume interface, or None."""
+    device = AudioUtilities.GetMicrophone()
+    return _volume(device) if device is not None else None
+
+
+def targets():
+    """[(device_id, volume)] for the mics being recorded from, else the default mic."""
+    enum = AudioUtilities.GetDeviceEnumerator()
+    active = enum.EnumAudioEndpoints(E_CAPTURE, DEVICE_STATE_ACTIVE)
+    in_use = []
+    for i in range(active.GetCount()):
+        device = active.Item(i)
+        try:
+            if _is_recording(device):
+                in_use.append((device.GetId(), _volume(device)))
+        except comtypes.COMError:
+            continue  # device vanished mid-enumeration
+    if in_use:
+        return in_use
+    device = AudioUtilities.GetMicrophone()
+    return [(device.GetId(), _volume(device))] if device is not None else []
+
+
+def device_name(device_id):
+    enum = AudioUtilities.GetDeviceEnumerator()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')  # pycaw warns about unreadable optional properties
+        return AudioUtilities.CreateDevice(enum.GetDevice(device_id)).FriendlyName
+
+
 class MicMonitor:
     def __init__(self, on_change, poll_sec=POLL_SEC):
-        """on_change(live) is called with True (mic live) / False (muted or no mic)."""
+        """on_change(live) is called with True (a target mic is live) / False (all muted or no mic)."""
         self.on_change = on_change
         self.poll_sec = poll_sec
         self._toggle = threading.Event()
         self._stop = threading.Event()
         self._thread = None
         self._live = None
+        self._target_ids = None
 
     def start(self):
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -46,20 +98,31 @@ class MicMonitor:
     def request_toggle(self):
         self._toggle.set()
 
+    def _log_targets(self, ids):
+        if ids == self._target_ids:
+            return
+        self._target_ids = ids
+        try:
+            names = ', '.join(device_name(i) for i in ids) or 'none'
+        except Exception:
+            names = f"{len(ids)} device(s)"
+        print(f"[mic] target: {names}")
+
     def _run(self):
         comtypes.CoInitialize()
         try:
             while not self._stop.is_set():
                 try:
-                    ep = _endpoint()
-                    if ep is None:
+                    eps = targets()
+                    self._log_targets(tuple(dev_id for dev_id, _ in eps))
+                    if self._toggle.is_set():
                         self._toggle.clear()
-                        live = False
-                    else:
-                        if self._toggle.is_set():
-                            self._toggle.clear()
-                            ep.SetMute(0 if ep.GetMute() else 1, None)
-                        live = not ep.GetMute()
+                        if eps:
+                            # Any target live -> mute all; all muted -> unmute all.
+                            mute = any(not ep.GetMute() for _, ep in eps)
+                            for _, ep in eps:
+                                ep.SetMute(1 if mute else 0, None)
+                    live = any(not ep.GetMute() for _, ep in eps)
                 except Exception as e:
                     print(f"[mic] error: {e}")
                     live = False

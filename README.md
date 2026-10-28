@@ -118,9 +118,20 @@ of a mapped key prints a `[key] Key.f18 pressed …` line, so you can check the 
 
 ### 3. Microphone
 
-The mic key acts on the **Windows default recording device** (Settings → System → Sound →
-Input), checked again on every poll, so plugging in a headset just works. The console prints
-`[mic] LIVE` / `[mic] MUTED` whenever the state changes, including changes made by other apps.
+The mic key acts on the **microphone(s) an app is recording from right now**. Meet, Teams,
+Discord and others often use a mic chosen in their own settings, not the Windows default.
+When nothing is recording, it falls back to the Windows default mic (Settings → System →
+Sound → Input). The target is re-checked every 0.5 s, so starting a call or plugging in a
+headset just works.
+
+- One press: if any target mic is live, all of them are muted; if all are muted, all are
+  unmuted.
+- The LED shows "live" while any target mic is live.
+- The console prints `[mic] target: <device>` when the target changes, and
+  `[mic] LIVE` / `[mic] MUTED` when the state changes, including changes made by other apps.
+
+This is a Windows-level mute: the app receives silence, so nothing can record you, but the
+app's own mute button doesn't change. Meet may show "your mic is muted in system settings".
 
 ### 4. Router
 

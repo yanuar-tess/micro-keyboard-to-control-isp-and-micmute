@@ -172,24 +172,22 @@ def check_user_policy(rep, client):
 
 def check_mic(rep, cfg):
     if cfg.mic_toggle_by_script:
+        names, reason = [], ""
         try:
             import comtypes
-            from mic_controller import _endpoint
+            from mic_controller import device_name, targets
             comtypes.CoInitialize()
             try:
-                ep = _endpoint()
-                ep.GetMute()
+                names = [device_name(dev_id) for dev_id, _ in targets()]
             finally:
                 comtypes.CoUninitialize()
         except Exception as e:
-            ep = None
             reason = f" ({e})"
-        else:
-            reason = ""
-        if ep is None:
-            rep.fatal.append(f"no default microphone to mute/unmute{reason}")
+        if not names:
+            rep.fatal.append(f"no microphone to mute/unmute{reason}")
             return False
-        rep.ok.append("default microphone found (mute toggled by this script)")
+        rep.ok.append(f"microphone target now: {', '.join(names)} "
+                      f"(mics in use, else the default; toggled by this script)")
         _warn_micmute_conflict(rep, cfg.mic_key)
         return True
 

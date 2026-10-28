@@ -1,0 +1,26 @@
+[project]
+name = "micro-keyboard-to-control-isp-and-micmute"
+version = "0.1.0"
+description = "Mini macro keyboard that swaps the MikroTik WAN and mutes the mic, with LED status"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # 4.x+ dropped the SHA-1 ssh-rsa host key, the only one RouterOS 6.x offers.
+    "paramiko>=3.5,<4",
+    "pycaw>=20260927",
+    "pynput>=1.8",
+    "pywinusb>=0.4.2",
+]
+
+[dependency-groups]
+# Only needed to compile the .exe (run.ps1).
+build = ["pyinstaller>=6.10"]
+
+[tool.uv]
+package = false
+# Use the Python from the official installer, never a uv-downloaded one.
+python-preference = "only-system"
+# Copy packages into .venv instead of hardlinking them from the uv cache.
+link-mode = "copy"
+# Trust the Windows certificate store (needed behind TLS-inspecting AV/proxies).
+native-tls = true

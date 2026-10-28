@@ -1,0 +1,29 @@
+# Site-specific settings (router address, user, key path)
+config.toml
+
+# Never commit keys or router backups/exports
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+*.backup
+*.rsc
+
+# Vendor configuration app (MINI_KEYBOARD.exe): third-party binary, not redistributed here
+*.7z
+*.zip
+*.exe
+
+# Runtime
+log/
+*.log
+
+# PyInstaller output (run.ps1)
+build/
+dist/
+
+# Python / uv
+.venv/
+venv/
+__pycache__/
+*.pyc

@@ -1,0 +1,47 @@
+# Copy to config.toml and fill in your own values. config.toml is git-ignored.
+# Another location can be used via the ISP_SWITCHER_CONFIG environment variable.
+
+[router]
+# MikroTik reachable over SSH from this PC.
+host = "192.168.88.1"
+user = "admin"
+port = 22
+# Private key for the router. Leave empty to use the IdentityFile / User / Port
+# from the matching Host block in ~/.ssh/config instead.
+key_file = "~/.ssh/id_rsa_router"
+# RouterOS 6.x only offers SHA-1 "ssh-rsa"; true forces ssh-rsa signatures.
+legacy_ssh_rsa = true
+
+# Exactly two ISPs. Each must have its own 0.0.0.0/0 route on the router whose
+# comment contains route_comment (case-insensitive). The switcher makes the
+# target's route distance=1 and the other's distance=2.
+[[isp]]
+name = "isp-a"
+route_comment = "ISP A"
+color = "blue"
+
+[[isp]]
+name = "isp-b"
+route_comment = "ISP B"
+color = "orange"
+
+[conntrack]
+# After a swap, existing flows keep the NAT decision of the old WAN and die.
+# Flushing re-NATs them on the new WAN. Destinations matching these RouterOS
+# regexes (LAN / VPN ranges) are kept.
+flush_after_swap = true
+keep_dst_regex = ["^192.168.", "^10.", "^172.(1[6-9]|2[0-9]|3[01])."]
+
+[keys]
+# pynput key names (f13-f24 are good choices: no other app uses them).
+isp = "f18"
+mic = "f19"
+# true: this script toggles the default mic on the mic key.
+# false: another app (e.g. MicMute) toggles it; the LED still follows the state.
+# Never let both toggle on the same key, or one press mutes and unmutes.
+mic_toggle_by_script = true
+
+[keyboard]
+# USB IDs of the mini keyboard (decimal or 0x hex as a string).
+vid = "0x514C"
+pid = "0x8851"

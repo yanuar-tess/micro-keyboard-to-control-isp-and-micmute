@@ -89,10 +89,17 @@ uv sync --group build --quiet
 if ($LASTEXITCODE -ne 0) { Fail "installing Python packages failed (uv sync exit $LASTEXITCODE)." }
 
 # --- 3. Compile ------------------------------------------------------------
-$exe = Join-Path $PSScriptRoot 'dist\isp_switcher\isp_switcher.exe'
+$distDir = Join-Path $PSScriptRoot 'dist\isp_switcher'
+$exe = Join-Path $distDir 'isp_switcher.exe'
 $sources = @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter *.py -File) +
            @(Get-Item -LiteralPath (Join-Path $PSScriptRoot 'pyproject.toml'),
-                                   (Join-Path $PSScriptRoot 'uv.lock'))
+                                   (Join-Path $PSScriptRoot 'uv.lock'),
+                                   (Join-Path $PSScriptRoot 'isp_switcher.spec'))
+
+# A copy already running from dist (e.g. the logon task) locks its files and
+# holds the single-instance mutex.
+$running = @(Get-CimInstance Win32_Process -Filter "Name like 'isp_switcher%.exe'" |
+             Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($distDir, 'OrdinalIgnoreCase') })
 
 $needBuild = $Rebuild -or -not (Test-Path -LiteralPath $exe)
 if (-not $needBuild) {
@@ -105,14 +112,13 @@ if (-not $needBuild) {
 }
 
 if ($needBuild) {
-    Step "compiling dist\isp_switcher\isp_switcher.exe..."
-    # --onedir (not --onefile): no self-extracting stub, which antivirus flags far less.
-    # pynput picks its backend at runtime, so its Windows modules must be named.
-    uv run --group build pyinstaller isp_switcher.py `
-        --noconfirm --clean --onedir --console --name isp_switcher `
-        --distpath dist --workpath build --specpath build `
-        --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 `
-        --log-level WARN
+    if ($running) {
+        $names = ($running | ForEach-Object { "$($_.Name) (PID $($_.ProcessId))" }) -join ', '
+        Fail "can't rebuild while $names is running from dist. Stop it first: .\install-task.ps1 -Stop, or close the running copy."
+    }
+    Step "compiling dist\isp_switcher\ (isp_switcher.exe + isp_switcher_bg.exe)..."
+    uv run --group build pyinstaller isp_switcher.spec `
+        --noconfirm --clean --distpath dist --workpath build --log-level WARN
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $exe)) {
         Fail "compiling the exe failed (pyinstaller exit $LASTEXITCODE)."
     }
@@ -130,4 +136,5 @@ Step "starting $(Split-Path -Leaf $exe) $($exeArgs -join ' ')"
 & $exe @exeArgs
 $code = $LASTEXITCODE
 if ($code -eq 2) { Fail "preflight found fatal problems (see above)." 2 }
+if ($code -eq 3) { Fail "another copy is already running (logon task?). Stop it with .\install-task.ps1 -Stop to run here." 3 }
 exit $code

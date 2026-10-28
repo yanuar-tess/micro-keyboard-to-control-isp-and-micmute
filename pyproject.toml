@@ -14,7 +14,9 @@ dependencies = [
 
 [dependency-groups]
 # Only needed to compile the .exe (run.ps1).
-build = ["pyinstaller>=6.10"]
+# <7: PyInstaller 7 refuses to build from an elevated terminal, and this app's
+# terminals are usually elevated (see README "Run elevated").
+build = ["pyinstaller>=6.10,<7"]
 
 [tool.uv]
 package = false

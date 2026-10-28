@@ -45,3 +45,10 @@ mic_toggle_by_script = true
 # USB IDs of the mini keyboard (decimal or 0x hex as a string).
 vid = "0x514C"
 pid = "0x8851"
+
+[log]
+# Folder for isp_switcher.log (relative to this file, or absolute). Rotates by size:
+# isp_switcher.log + .1 .. .<backups>, oldest dropped.
+dir = "log"
+max_mb = 5
+backups = 5

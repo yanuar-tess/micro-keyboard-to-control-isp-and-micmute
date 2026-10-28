@@ -137,8 +137,53 @@ comments) and is git-ignored. Settings left out of `[router]` fall back to the m
 
 Global key capture uses a low-level keyboard hook. Windows (UIPI) hides keystrokes from
 a non-elevated hook while an **elevated** window (e.g. an admin terminal) has focus.
-So run the switcher elevated. For autostart, use a Task Scheduler task "At log on" with
-**Run with highest privileges**.
+So run the switcher elevated. The logon task below does that for you.
+
+### Run in the background at logon
+
+A Windows *service* can't do this job: services run in session 0, which has no access to
+your keyboard hook or your user audio session. `install-task.ps1` registers a
+**Task Scheduler** task instead, which behaves like a service:
+
+```powershell
+.\run.ps1 -Check            # build dist\isp_switcher\ first
+.\install-task.ps1          # elevated PowerShell: install/update + start
+.\install-task.ps1 -Status  # task state, PID, last log lines
+.\install-task.ps1 -Stop    # e.g. before rebuilding
+.\install-task.ps1 -Start
+.\install-task.ps1 -Uninstall
+```
+
+What the task does:
+- Starts `dist\isp_switcher\isp_switcher_bg.exe` (no window) 30 s after you log on.
+- Runs with highest privileges.
+- Passes `--wait 300`, which retries failed startup checks for up to 5 minutes while
+  the network, router and USB devices come up.
+- Has no time limit, keeps running on battery, and restarts if it crashes.
+
+Only one copy runs per session. A second copy (e.g. `.\run.ps1` while the task runs) exits
+with code 3 instead of doubling every key press. `run.ps1` refuses to rebuild while the
+task's exe is running; stop it first with `-Stop`.
+
+### Logs
+
+Everything the switcher prints, including tracebacks from crashed threads, also goes to
+`isp_switcher.log`, rotated by size:
+
+```toml
+[log]
+dir = "log"      # relative to config.toml, or absolute, e.g. "D:/logs/isp-switcher"
+max_mb = 5       # rotate when the file reaches this size
+backups = 5      # keep isp_switcher.log.1 .. .5; the oldest is dropped
+```
+
+Interactive runs show the same lines in the console; the background exe writes only to
+the log.
+
+```
+2026-10-28 13:38:25,332 INFO  [startup] active ISP = ISP-A -> LED blue
+2026-10-28 13:38:25,336 INFO  [mic] MUTED
+```
 
 ### One mic toggler only
 
@@ -308,6 +353,9 @@ uv run led_probe.py headers  # can the LEDs be split?
 | `led_controller.py` | keyboard LED over HID: colors, blink, replug recovery |
 | `mic_controller.py` | default-mic mute toggle + state polling |
 | `run.ps1` | install, compile to `.exe`, run |
+| `install-task.ps1` | logon task: install / status / stop / start / uninstall |
+| `isp_switcher.spec` | PyInstaller build: console `isp_switcher.exe` + windowless `isp_switcher_bg.exe` |
+| `log_setup.py` | tees all output into the rotating log file |
 | `preflight.py` | startup checks (fatal / warning), incl. the router minimum requirements |
 | `config.py` | loads and validates `config.toml` |
 | `find_device.py` | finds and confirms the keyboard's USB VID/PID |

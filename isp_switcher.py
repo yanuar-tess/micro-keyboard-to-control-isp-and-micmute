@@ -14,16 +14,25 @@ this script when keys.mic_toggle_by_script is true, else by another app; the
 mic state is always tracked). Both keyboard LEDs share one color, so the mic
 state is shown by blinking: mic muted -> steady ISP color, mic live -> ISP
 color blinking with white. Mutes made elsewhere (Teams, MicMute, ...) show too.
+
+Options:
+  --config PATH   config file (default: ISP_SWITCHER_CONFIG, else config.toml next to the exe/script)
+  --check         run the preflight checks only
+  --wait SEC      retry failed preflight checks for up to SEC seconds before giving
+                  up (logon task: the network may not be up yet)
+
+All output also goes to a size-rotated log file ([log] in the config), which is
+the only output of the windowless isp_switcher_bg.exe build.
 """
+import ctypes
 import sys
 import threading
 import time
 
-sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-
 from pynput import keyboard
 
 import config as config_mod
+import log_setup
 import preflight
 from led_controller import LedController
 from mic_controller import MicMonitor
@@ -41,6 +50,30 @@ CONFIRM_TIMEOUT_SEC = 30
 CONFIRM_POLL_SEC = 0.5
 
 LED_REFRESH_SEC = 3
+
+# Per-session mutex: two copies would both act on every key press, so a mic
+# toggle would cancel itself out.
+MUTEX_NAME = 'Local\\micro-keyboard-to-control-isp-and-micmute'
+ERROR_ALREADY_EXISTS = 183
+
+PREFLIGHT_RETRY_SEC = 15
+
+
+def _arg(name):
+    args = sys.argv[1:]
+    if name in args:
+        i = args.index(name)
+        return args[i + 1] if i + 1 < len(args) else None
+    return None
+
+
+def _acquire_single_instance():
+    """Returns the mutex handle (keep it alive), or None if another copy holds it."""
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    if kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+        return None
+    return handle
 
 
 def _parse_key(name):
@@ -196,19 +229,42 @@ class IspSwitcher:
 
 
 def main():
+    check_only = '--check' in sys.argv[1:]
     try:
-        cfg = config_mod.load()
+        cfg = config_mod.load(_arg('--config'))
         isp_key = _parse_key(cfg.isp_key)
         mic_key = _parse_key(cfg.mic_key)
     except config_mod.ConfigError as e:
+        # No usable [log] settings yet: still leave a trace for the windowless build.
+        log_setup.setup(config_mod.DEFAULT_LOG_DIR, 1024 * 1024, 2)
         print(f"[preflight] FATAL   {e}")
         sys.exit(2)
 
-    rep = preflight.run(cfg)
-    rep.print()
+    log_path = log_setup.setup(cfg.log_dir, cfg.log_max_bytes, cfg.log_backups)
+    print(f"[start] logging to {log_path}")
+
+    mutex = None
+    if not check_only:
+        mutex = _acquire_single_instance()
+        if mutex is None:
+            print("[start] another isp_switcher is already running in this session - exiting")
+            sys.exit(3)
+
+    try:
+        wait_sec = float(_arg('--wait') or 0)
+    except ValueError:
+        wait_sec = 0
+    deadline = time.time() + wait_sec
+    while True:
+        rep = preflight.run(cfg)
+        rep.print()
+        if not rep.fatal or time.time() >= deadline:
+            break
+        print(f"[start] fatal problems, retrying in {PREFLIGHT_RETRY_SEC}s (--wait)")
+        time.sleep(PREFLIGHT_RETRY_SEC)
     if rep.fatal:
         sys.exit(2)
-    if '--check' in sys.argv[1:]:
+    if check_only:
         return
 
     led = LedController(cfg.keyboard_vid, cfg.keyboard_pid)

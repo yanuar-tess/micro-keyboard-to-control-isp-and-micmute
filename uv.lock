@@ -277,7 +277,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-build = [{ name = "pyinstaller", specifier = ">=6.10" }]
+build = [{ name = "pyinstaller", specifier = ">=6.10,<7" }]
 
 [[package]]
 name = "packaging"

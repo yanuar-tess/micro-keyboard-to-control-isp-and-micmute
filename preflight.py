@@ -198,6 +198,12 @@ def check_mic(rep, cfg):
                          f"({MICMUTE_EXE}); install it or set mic_toggle_by_script = true")
         return False
     rep.ok.append("MicMute installed (it toggles the mic, LED follows)")
+    import psutil
+    if not any((p.info['name'] or '').lower() == 'micmute.exe'
+               for p in psutil.process_iter(['name'])):
+        # Nothing is handed to MicMute, so no ordering issue: the mic key simply does
+        # nothing until it runs, and the LED picks the state up whenever it changes.
+        rep.warn.append("MicMute is not running: the mic key does nothing until it starts")
     return True
 
 

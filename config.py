@@ -43,6 +43,12 @@ class Config:
     mic_toggle_by_script: bool
     keyboard_vid: int
     keyboard_pid: int
+    log_dir: str
+    log_max_bytes: int
+    log_backups: int
+
+
+DEFAULT_LOG_DIR = os.path.join(HERE, 'log')
 
 
 class ConfigError(Exception):
@@ -100,6 +106,7 @@ def load(path=None):
         ct = raw.get('conntrack', {})
         keys = raw.get('keys', {})
         kb = raw.get('keyboard', {})
+        lg = raw.get('log', {})
 
         return Config(
             router=router,
@@ -112,6 +119,9 @@ def load(path=None):
             mic_toggle_by_script=bool(keys.get('mic_toggle_by_script', True)),
             keyboard_vid=_int(kb.get('vid', 0x514C)),
             keyboard_pid=_int(kb.get('pid', 0x8851)),
+            log_dir=_path(lg.get('dir', 'log'), base),
+            log_max_bytes=int(float(lg.get('max_mb', 5)) * 1024 * 1024),
+            log_backups=_int(lg.get('backups', 5)),
         )
     except KeyError as e:
         raise ConfigError(f"{path}: missing required setting {e}") from None

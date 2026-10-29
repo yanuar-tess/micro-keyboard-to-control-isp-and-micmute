@@ -13,12 +13,12 @@ Turn a cheap 2-key USB macro pad into a desk control panel for a Windows PC:
 | State | LED (both LEDs) |
 |---|---|
 | Mic **muted** | steady ISP color |
-| Mic **live** | dark the moment it goes live, then an Airbus-style double strobe: dark 1 s · ISP mic-live color 0.1 s · dark 0.1 s · ISP mic-live color 0.1 s, repeating |
+| Mic **live** | white the moment it goes live, then an Airbus-style double strobe: white 1 s · ISP mic-live color 0.1 s · white 0.1 s · ISP mic-live color 0.1 s, repeating |
 | ISP swap in progress | green ↔ yellow, fast blink |
 | Router error / swap failed | red |
 
 ISP colors are set per ISP in `config.toml`: `color` (mic muted) and the optional
-`mic_live_color` (mic live, defaults to `color`), e.g. blue / cyan and orange / yellow.
+`mic_live_color` (the flash color while the mic is live, defaults to `color`).
 
 ## Requirements
 
@@ -344,13 +344,10 @@ Findings from `led_probe.py`:
 - A **color** change shows live without `commit`. A **mode** change only takes effect
   after `commit`.
 - `commit` appears to save the state as the power-on color (flash). The controller
-  sends it only when the steady color actually changes or the LED goes dark / lit,
-  never for colored blink frames or refreshes.
-- There is no "off" color (those nibbles show white). Dark is mode 0, so each
-  lit ↔ dark change needs `commit`. The mic-live strobe does that 4 times per 1.3 s
-  cycle. If `commit` really writes the keyboard's flash, long mic-live sessions add
-  wear; set `MIC_LIVE_PATTERN` in `isp_switcher.py` back to a white flash instead of
-  `OFF` to avoid it.
+  sends it only when the steady color actually changes, never for blink frames or
+  refreshes.
+- There is no live "off" color (those nibbles show white); dark is mode 0 and needs
+  `commit` on every change, so the mic-live strobe uses white as its base instead.
 
 `led_probe.py` re-runs the experiments interactively. Stop the switcher first:
 

@@ -13,7 +13,7 @@ Mic key (default F19, button #2): toggles the Windows default microphone (by
 this script when keys.mic_toggle_by_script is true, else by another app; the
 mic state is always tracked). Both keyboard LEDs share one color, so the mic
 state is shown by blinking: mic muted -> steady ISP color, mic live -> the ISP's
-mic_live_color (default: its color) as an Airbus-style double flash with dark in between. Mutes made elsewhere (Teams, MicMute, ...) show too.
+mic_live_color (default: its color) as an Airbus-style double flash on a white base. Mutes made elsewhere (Teams, MicMute, ...) show too.
 
 Options:
   --config PATH   config file (default: ISP_SWITCHER_CONFIG, else config.toml next to the exe/script)
@@ -34,7 +34,7 @@ from pynput import keyboard
 import config as config_mod
 import log_setup
 import preflight
-from led_controller import OFF, LedController
+from led_controller import LedController
 from mic_controller import MicMonitor
 from mikrotik_client import MikrotikClient
 
@@ -43,11 +43,11 @@ BLINK_B = 'yellow'
 BLINK_INTERVAL = 0.1
 
 # Mic-live Airbus-style strobe (double flash, ~46/min): (color, seconds); None =
-# the ISP's mic_live_color, OFF = dark. It starts with the long dark phase so the
-# LED goes out the moment the mic goes live. Dark needs a commit per lit<->dark
-# change (4 per cycle). ~0.1 s is the shortest flash that reads reliably over USB
-# HID writes and Windows timer resolution.
-MIC_LIVE_PATTERN = [(OFF, 1.0), (None, 0.1), (OFF, 0.1), (None, 0.1)]
+# the ISP's mic_live_color. White is the base (there is no live "off"; dark needs
+# a commit per frame), and it starts with it so the LED changes the moment the mic
+# goes live. ~0.1 s is the shortest flash that reads reliably over USB HID writes
+# and Windows timer resolution.
+MIC_LIVE_PATTERN = [('white', 1.0), (None, 0.1), ('white', 0.1), (None, 0.1)]
 
 CONFIRM_TIMEOUT_SEC = 30
 CONFIRM_POLL_SEC = 0.5

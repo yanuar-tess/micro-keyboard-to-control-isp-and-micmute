@@ -15,15 +15,20 @@ legacy_ssh_rsa = true
 # Exactly two ISPs. Each must have its own 0.0.0.0/0 route on the router whose
 # comment contains route_comment (case-insensitive). The switcher makes the
 # target's route distance=1 and the other's distance=2.
+# color = LED while this ISP is active and the mic is muted. mic_live_color
+# (optional, default = color) is used between the white flashes while the mic
+# is live. Colors: white red orange yellow green cyan blue purple.
 [[isp]]
 name = "isp-a"
 route_comment = "ISP A"
 color = "blue"
+mic_live_color = "cyan"
 
 [[isp]]
 name = "isp-b"
 route_comment = "ISP B"
 color = "orange"
+mic_live_color = "yellow"
 
 [conntrack]
 # After a swap, existing flows keep the NAT decision of the old WAN and die.

@@ -21,6 +21,7 @@ class Isp:
     name: str
     route_comment: str
     color: str
+    mic_live_color: str
 
 
 @dataclass
@@ -94,14 +95,16 @@ def load(path=None):
 
         isps = [Isp(name=i['name'],
                     route_comment=_no_quotes('isp.route_comment', i['route_comment']),
-                    color=i['color'].lower())
+                    color=i['color'].lower(),
+                    mic_live_color=(i.get('mic_live_color') or i['color']).lower())
                 for i in raw['isp']]
         if len(isps) != 2:
             raise ConfigError(f"Exactly two [[isp]] entries are required, got {len(isps)}")
         for isp in isps:
-            if isp.color not in COLOR_CODES:
-                raise ConfigError(f"isp {isp.name}: unknown color {isp.color!r}, "
-                                  f"use one of {', '.join(COLOR_CODES)}")
+            for key in ('color', 'mic_live_color'):
+                if getattr(isp, key) not in COLOR_CODES:
+                    raise ConfigError(f"isp {isp.name}: unknown {key} {getattr(isp, key)!r}, "
+                                      f"use one of {', '.join(COLOR_CODES)}")
 
         ct = raw.get('conntrack', {})
         keys = raw.get('keys', {})

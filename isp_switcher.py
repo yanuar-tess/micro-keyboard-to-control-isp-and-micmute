@@ -12,8 +12,8 @@ confirm, the swap is reverted.
 Mic key (default F19, button #2): toggles the Windows default microphone (by
 this script when keys.mic_toggle_by_script is true, else by another app; the
 mic state is always tracked). Both keyboard LEDs share one color, so the mic
-state is shown by blinking: mic muted -> steady ISP color, mic live -> ISP
-color with a white double blink. Mutes made elsewhere (Teams, MicMute, ...) show too.
+state is shown by blinking: mic muted -> steady ISP color, mic live -> the ISP's
+mic_live_color (default: its color) with a white double blink. Mutes made elsewhere (Teams, MicMute, ...) show too.
 
 Options:
   --config PATH   config file (default: ISP_SWITCHER_CONFIG, else config.toml next to the exe/script)
@@ -43,7 +43,7 @@ BLINK_B = 'yellow'
 BLINK_INTERVAL = 0.1
 
 # Mic-live Airbus-style strobe (double flash, ~46/min), starting with white the
-# moment the mic goes live: (color, seconds); None = the ISP color. There is no
+# moment the mic goes live: (color, seconds); None = the ISP's mic_live_color. There is no
 # live "off" color, so the flashes are white. ~0.1 s is the shortest flash that
 # reads reliably over USB HID writes and Windows timer resolution.
 MIC_LIVE_PATTERN = [('white', 0.1), (None, 0.1), ('white', 0.1), (None, 1.0)]
@@ -89,20 +89,28 @@ def _parse_key(name):
 
 
 class IspSwitcher:
-    def __init__(self, led, mt, isp_colors, flush_after_swap=True):
+    def __init__(self, led, mt, isp_colors, isp_live_colors=None, flush_after_swap=True):
         self.led = led
         self.mt = mt
         self.isp_colors = isp_colors
+        self.isp_live_colors = isp_live_colors or {}
         self.flush_after_swap = flush_after_swap
         self._swap_lock = threading.Lock()
         self._swapping = False
         self._led_lock = threading.Lock()
         self._color = None  # ISP color, or 'red' on error
+        self._live_color = None  # ISP color used in the mic-live strobe
         self._mic_live = False
 
-    def _show(self, color):
+    def _show(self, color, live_color=None):
         self._color = color
+        self._live_color = live_color or color
         self._render()
+
+    def _show_isp(self, name):
+        color = self.isp_colors[name]
+        self._show(color, self.isp_live_colors.get(name))
+        return color
 
     def show_error(self):
         self._show('red')
@@ -118,7 +126,7 @@ class IspSwitcher:
             with self._swap_lock:
                 if self._swapping:
                     return
-            color = self._color
+            color, live_color = self._color, self._live_color
             if color is None:
                 return
             # LED is cosmetic: a keyboard write failure (e.g. unplugged) must never
@@ -129,7 +137,7 @@ class IspSwitcher:
                 # keyboard's power-on color, even while the mic blink runs.
                 self.led.set_color(color)
                 if self._mic_live:
-                    self.led.start_pattern([(c or color, sec) for c, sec in MIC_LIVE_PATTERN])
+                    self.led.start_pattern([(c or live_color, sec) for c, sec in MIC_LIVE_PATTERN])
             except Exception as e:
                 print(f"[led] set {color} failed (keyboard unplugged?): {e}")
 
@@ -146,8 +154,7 @@ class IspSwitcher:
 
     def sync_led_to_current_isp(self):
         current = self.mt.get_active_isp()
-        color = self.isp_colors[current]
-        self._show(color)
+        color = self._show_isp(current)
         print(f"[startup] active ISP = {current.upper()} -> LED {color}")
         return current
 
@@ -186,8 +193,7 @@ class IspSwitcher:
 
             if confirmed:
                 self._flush_connections()
-                color = self.isp_colors[target]
-                self._show(color)
+                color = self._show_isp(target)
                 print(f"[swap] confirmed {target.upper()} active -> LED {color}")
             else:
                 print(f"[swap] timeout - reverting to {previous.upper()}")
@@ -220,8 +226,7 @@ class IspSwitcher:
                 restored = False
             if restored:
                 self._flush_connections()
-                color = self.isp_colors[previous]
-                self._show(color)
+                color = self._show_isp(previous)
                 print(f"[revert] restored {previous.upper()} -> LED {color}")
                 return
             time.sleep(CONFIRM_POLL_SEC)
@@ -272,6 +277,7 @@ def main():
     led = LedController(cfg.keyboard_vid, cfg.keyboard_pid)
     mt = MikrotikClient(cfg.router, cfg.isps, cfg.keep_dst_regex)
     switcher = IspSwitcher(led, mt, {isp.name: isp.color for isp in cfg.isps},
+                           {isp.name: isp.mic_live_color for isp in cfg.isps},
                            flush_after_swap=cfg.flush_after_swap)
 
     try:

@@ -13,11 +13,12 @@ Turn a cheap 2-key USB macro pad into a desk control panel for a Windows PC:
 | State | LED (both LEDs) |
 |---|---|
 | Mic **muted** | steady ISP color |
-| Mic **live** | white the moment it goes live, then an Airbus-style double strobe: white 0.1 s · ISP 0.1 s · white 0.1 s · ISP 1 s, repeating |
+| Mic **live** | white the moment it goes live, then an Airbus-style double strobe: white 0.1 s · ISP mic-live color 0.1 s · white 0.1 s · ISP mic-live color 1 s, repeating |
 | ISP swap in progress | green ↔ yellow, fast blink |
 | Router error / swap failed | red |
 
-ISP colors are set per ISP in `config.toml`.
+ISP colors are set per ISP in `config.toml`: `color` (mic muted) and the optional
+`mic_live_color` (mic live, defaults to `color`), e.g. blue / cyan and orange / yellow.
 
 ## Requirements
 

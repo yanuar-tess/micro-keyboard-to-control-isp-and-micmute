@@ -16,7 +16,10 @@ PID = 0x8851
 # Byte 12 = color (high nibble) | mode (low nibble). Codes below use mode 1 (steady).
 # Other modes, mapped with led_probe.py: 0 off, 2 hardware fast blink, 3/4 press-reactive,
 # 5 steady white; 6-F are rejected. Both LEDs always share one color.
-# There is no live "off": color nibbles 0x0 and 0x8-0xF all show white.
+# There is no "off" color: nibbles 0x0 and 0x8-0xF all show white. Dark = mode 0,
+# which (like any mode change) needs the commit packet, as does going back to lit.
+OFF = 'off'
+OFF_BYTE = 0x00
 COLOR_CODES = {
     'white':  0x01,
     'red':    0x11,
@@ -39,6 +42,7 @@ class LedController:
         self._blink_stop = None
         self._blink_thread = None
         self._last_color = None
+        self._dark = False  # LED is in mode 0 (committed off)
         try:
             self._open()
         except RuntimeError as e:
@@ -94,11 +98,14 @@ class LedController:
             self._report.send()
 
     def _apply(self, color_name, commit):
+        """color_name may be OFF (dark). Entering or leaving dark always commits."""
         color_name = color_name.lower()
-        if color_name not in COLOR_CODES:
+        dark = color_name == OFF
+        if not dark and color_name not in COLOR_CODES:
             raise ValueError(f"Unknown color '{color_name}'")
 
-        color_byte = COLOR_CODES[color_name]
+        color_byte = OFF_BYTE if dark else COLOR_CODES[color_name]
+        commit = commit or dark != self._dark
         with self._lock:
             self._send([0x03, 0xFE, 0xB0, 0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00,
                        0x01, 0x00, color_byte])
@@ -108,6 +115,7 @@ class LedController:
             if commit:
                 time.sleep(0.02)
                 self._send([0x03, 0xFD, 0xFE, 0xFF])
+            self._dark = dark
 
     def set_color(self, color_name):
         # Remember the intended color even if the write fails, so refresh()
@@ -126,7 +134,8 @@ class LedController:
         self.start_pattern([(color_a, interval_sec), (color_b, interval_sec)])
 
     def start_pattern(self, steps):
-        """Loop over [(color, seconds), ...]; the first color shows immediately."""
+        """Loop over [(color, seconds), ...]; the first color shows immediately.
+        A color of OFF turns the LED dark (costs a commit per lit<->dark change)."""
         self.stop_blink()
         stop_event = threading.Event()
 
